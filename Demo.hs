@@ -16,9 +16,8 @@ import Graphics.XDot.Parser
 import Graphics.XDot.Viewer
 import Graphics.XDot.Types hiding (w, h)
 
-import Graphics.UI.Gtk hiding (Box, Signal, Dot, Point, Rectangle, Object)
-import Graphics.Rendering.Cairo
-import qualified Graphics.UI.Gtk.Gdk.Events as E
+import qualified Graphics.UI.Threepenny as UI
+import Graphics.UI.Threepenny.Core
 
 data State = State
   { objects  :: ([(Object String, Operation)], Rectangle)
@@ -49,14 +48,29 @@ run file = do
 
   state <- newIORef $ State objs [] (0,0) None
 
-  initGUI
-  window <- windowNew
-  canvas <- drawingAreaNew
+  startGUI (defaultConfig  { jsPort = Just 8080 }) (setup state)
 
-  set window [ windowTitle := "XDot Demo"
-             , containerChild := canvas
-             ]
+canvasSize = 1000
 
+setup :: IORef State -> Window -> UI ()
+setup state window = do
+  return window # set UI.title "Canvas - Examples"
+
+  canvas <- UI.canvas
+              # set UI.height canvasSize
+              # set UI.width  canvasSize
+              # set UI.style [("border", "solid black 1px"), ("background", "#eee")]
+              # set UI.textFont "10px monospace"
+
+  body <- getBody window #+
+    [ column [element canvas] ]
+
+  --setupGUI window body canvas dummy
+  liftIO $ getChar
+  redraw canvas state
+  return ()
+
+{-
   on canvas draw $ do
     redraw canvas state
 
@@ -88,7 +102,7 @@ click state _dg = do
     Edge f t -> putStrLn $ "Edge clicked: " ++ f ++ " -> " ++ t
     _ -> return ()
 
-tick :: WidgetClass w => w -> IORef State -> IO ()
+tick :: UI.Canvas -> IORef State -> IO ()
 tick canvas state = do
   oldS <- readIORef state
   let oldHover = hover oldS
@@ -108,12 +122,11 @@ tick canvas state = do
 
   s <- readIORef state
   unless (oldHover == hover s) $ widgetQueueDraw canvas
-
-redraw :: WidgetClass w => w -> IORef State -> Render ()
+-}
+redraw :: UI.Canvas -> IORef State -> UI ()
 redraw canvas state = do
   s <- liftIO $ readIORef state
-  rw <- liftIO $ widgetGetAllocatedWidth canvas
-  rh <- liftIO $ widgetGetAllocatedHeight canvas
+  let (rw, rh) = (1000,1000)
 
   let (ops, size'@(_,_,sw,sh)) = objects s
 
@@ -122,14 +135,27 @@ redraw canvas state = do
       scaley = scalex
       offsetx = 0.5 * fromIntegral rw
       offsety = 0.5 * fromIntegral rh
-  save
-  translate offsetx offsety
-  scale scalex scaley
+  save canvas
+  translate offsetx offsety canvas
+  scale scalex scaley canvas
 
-  result <- drawAll (hover s) size' ops
+  result <- drawAll canvas (hover s) size' ops
 
-  restore
+  restore canvas
 
   let boundingBoxes = map (\(o, (x,y,w,h)) -> (o, (x*scalex+offsetx,y*scaley+offsety,w*scalex,h*scaley))) result
 
   liftIO $ modifyIORef state (\s' -> s' {bounds = boundingBoxes})
+
+save :: UI.Canvas -> UI ()
+save c = runFunction $ ffi "%1.getContext('2d').save();" c
+
+restore :: UI.Canvas -> UI ()
+restore c = runFunction $ ffi "%1.getContext('2d').restore();" c
+
+translate :: Double -> Double -> UI.Canvas -> UI ()
+translate x y c = runFunction $ ffi "%1.getContext('2d').translate(%2, %3);" c x y
+
+scale :: Double -> Double -> UI.Canvas -> UI ()
+scale x y c = do
+  runFunction $ ffi "%1.getContext('2d').scale(%2, %3);" c x y
