@@ -32,7 +32,8 @@ Library
                  graphviz >= 2999.16 && < 2999.19,
                  text >= 0.11 && < 1.3,
                  polyparse >= 1.8 && < 1.13,
-                 threepenny-gui
+                 threepenny-gui,
+                 threepenny-utils
   Hs-source-dirs: src/
   Ghc-options: -Wall -fno-warn-unused-do-bind
 
